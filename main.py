@@ -162,7 +162,7 @@ def download_cv(request: Request, db: Session = Depends(get_db)):
 
     cv_url = profile.cv_url
     clean_url = cv_url.split("?")[0]
-    filename = os.path.basename(clean_url) or "Abolore_Sanni_CV.pdf"
+    filename = "Abolore_Sanni_CV.pdf"
     mime_type, _ = mimetypes.guess_type(clean_url)
     media_type = mime_type or "application/octet-stream"
 
