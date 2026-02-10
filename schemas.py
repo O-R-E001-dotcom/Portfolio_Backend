@@ -62,3 +62,11 @@ class PaginatedProjects(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class Profile(BaseModel):
+    id: Optional[int] = None
+    profile_image_url: Optional[str] = None
+    cv_url: Optional[str] = None
+    class Config:
+        orm_mode = True

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from database import engine, Base, get_db
-from models import Skill, Project
+from models import Skill, Project, Profile
 from schemas import (
     SkillCreate,
     SkillUpdate,
@@ -16,10 +16,18 @@ from schemas import (
     PaginatedSkills,
     PaginatedProjects,
     Token,
+    Profile as ProfileOut,
 )
 from auth import authenticate_admin, create_access_token
 from deps import get_current_admin
-from cloudinary_utils import upload_project_image, delete_project_image
+from cloudinary_utils import (
+    upload_project_image,
+    delete_project_image,
+    upload_profile_image,
+    delete_profile_image,
+    upload_cv_file,
+    delete_cv_file,
+)
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -86,10 +94,60 @@ def normalize_proficiency(value):
     except Exception:
         return "Intermediate"
 
+
+def get_or_create_profile(db: Session) -> Profile:
+    profile = db.query(Profile).first()
+    if profile:
+        return profile
+    profile = Profile()
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
 @app.get("/")
 @limiter.limit("60/minute")
 def root(request: Request):
     return {"message": "Portfolio backend is running"}
+
+
+@app.get("/profile", response_model=ProfileOut)
+@limiter.limit("60/minute")
+def get_profile(request: Request, db: Session = Depends(get_db)):
+    profile = db.query(Profile).first()
+    if not profile:
+        return ProfileOut()
+    return profile
+
+
+@app.put("/profile", response_model=ProfileOut)
+@limiter.limit("20/minute")
+def update_profile(
+    request: Request,
+    image: Optional[UploadFile] = File(None),
+    cv: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    profile = get_or_create_profile(db)
+
+    if image:
+        if profile.profile_image_public_id:
+            delete_profile_image(profile.profile_image_public_id)
+        uploaded = upload_profile_image(image.file)
+        profile.profile_image_url = uploaded.get("url")
+        profile.profile_image_public_id = uploaded.get("public_id")
+
+    if cv:
+        if profile.cv_public_id:
+            delete_cv_file(profile.cv_public_id)
+        uploaded = upload_cv_file(cv.file)
+        profile.cv_url = uploaded.get("url")
+        profile.cv_public_id = uploaded.get("public_id")
+
+    db.commit()
+    db.refresh(profile)
+    return profile
 
 @app.post("/auth/login", response_model=Token)
 @limiter.limit("10/minute")

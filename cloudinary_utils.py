@@ -33,3 +33,43 @@ def delete_project_image(public_id: str):
     except Exception:
         # Best-effort cleanup
         pass
+
+
+def upload_profile_image(file):
+    result = cloudinary.uploader.upload(file, folder="portfolio/profile")
+    return {
+        "url": result.get("secure_url"),
+        "public_id": result.get("public_id"),
+    }
+
+
+def delete_profile_image(public_id: str):
+    if not public_id:
+        return
+    try:
+        cloudinary.uploader.destroy(public_id)
+    except Exception:
+        pass
+
+
+def upload_cv_file(file):
+    result = cloudinary.uploader.upload(
+        file,
+        folder="portfolio/cv",
+        resource_type="raw",
+        use_filename=True,
+        unique_filename=True,
+    )
+    return {
+        "url": result.get("secure_url"),
+        "public_id": result.get("public_id"),
+    }
+
+
+def delete_cv_file(public_id: str):
+    if not public_id:
+        return
+    try:
+        cloudinary.uploader.destroy(public_id, resource_type="raw")
+    except Exception:
+        pass

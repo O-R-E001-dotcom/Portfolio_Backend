@@ -22,3 +22,13 @@ class Project(Base):
     image_url = Column(String(1000), nullable=True)
     image_public_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Profile(Base):
+    __tablename__ = "profile"
+    id = Column(Integer, primary_key=True, index=True)
+    profile_image_url = Column(String(1000), nullable=True)
+    profile_image_public_id = Column(String(255), nullable=True)
+    cv_url = Column(String(1000), nullable=True)
+    cv_public_id = Column(String(255), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
