@@ -55,10 +55,11 @@ def delete_profile_image(public_id: str):
 def upload_cv_file(file):
     result = cloudinary.uploader.upload(
         file,
-        folder="portfolio/cv",
+        public_id="portfolio/cv/Abolore_Sanni_CV",
         resource_type="raw",
-        use_filename=True,
-        unique_filename=True,
+        use_filename=False,
+        unique_filename=False,
+        overwrite=True,
     )
     return {
         "url": result.get("secure_url"),
