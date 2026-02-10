@@ -186,9 +186,7 @@ def view_cv(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="CV not found")
 
     cv_url = profile.cv_url
-    clean_url = cv_url.split("?")[0]
-    mime_type, _ = mimetypes.guess_type(clean_url)
-    media_type = mime_type or "application/pdf"
+    media_type = "application/pdf"
 
     def stream():
         with urllib.request.urlopen(cv_url) as resp:
@@ -198,7 +196,7 @@ def view_cv(request: Request, db: Session = Depends(get_db)):
                     break
                 yield chunk
 
-    headers = {"Content-Disposition": "inline"}
+    headers = {"Content-Disposition": "inline; filename=\"Abolore_Sanni_CV.pdf\""}
     return StreamingResponse(stream(), media_type=media_type, headers=headers)
 
 @app.post("/auth/login", response_model=Token)
