@@ -177,6 +177,30 @@ def download_cv(request: Request, db: Session = Depends(get_db)):
     headers = {"Content-Disposition": f'attachment; filename=\"{filename}\"'}
     return StreamingResponse(stream(), media_type=media_type, headers=headers)
 
+
+@app.get("/profile/cv/view")
+@limiter.limit("60/minute")
+def view_cv(request: Request, db: Session = Depends(get_db)):
+    profile = db.query(Profile).first()
+    if not profile or not profile.cv_url:
+        raise HTTPException(status_code=404, detail="CV not found")
+
+    cv_url = profile.cv_url
+    clean_url = cv_url.split("?")[0]
+    mime_type, _ = mimetypes.guess_type(clean_url)
+    media_type = mime_type or "application/pdf"
+
+    def stream():
+        with urllib.request.urlopen(cv_url) as resp:
+            while True:
+                chunk = resp.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    headers = {"Content-Disposition": "inline"}
+    return StreamingResponse(stream(), media_type=media_type, headers=headers)
+
 @app.post("/auth/login", response_model=Token)
 @limiter.limit("10/minute")
 def admin_login(payload: AdminLogin, request: Request):
