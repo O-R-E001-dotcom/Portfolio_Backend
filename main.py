@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from pydantic import BaseModel
-
+import uvicorn
 from database import engine, Base, get_db
 from models import Skill, Project, Profile
 from schemas import (
@@ -381,3 +381,7 @@ def delete_project(
     db.delete(project)
     db.commit()
     return {"ok": True}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
