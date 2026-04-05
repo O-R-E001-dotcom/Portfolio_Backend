@@ -1,2 +1,9 @@
+# Database
+portfolio.db
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Environment variables (Sensitive!)
 .env
