@@ -9,4 +9,5 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from main import app  # noqa: E402
 
+
 handler = Mangum(app, api_gateway_base_path="/api")
