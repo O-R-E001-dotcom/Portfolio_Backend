@@ -1,8 +1,9 @@
 
 [build]
-  command = "pip install -r requirements.txt" # Ensures dependencies are ready
-  publish = "public"                          # Point this to a folder with a blank index.html
-  functions = "netlify/functions"             # Where your api.py lives
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
 
 [[redirects]]
   from = "/api/*"
