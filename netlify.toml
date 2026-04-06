@@ -9,6 +9,3 @@
   to = "/.netlify/functions/api/:splat"
   status = 200
 
-# Optional: Force Python 3.x if needed
-[functions]
-  node_bundle = true
