@@ -9,5 +9,3 @@ slowapi
 python-multipart
 redis
 psycopg2-binary
-pymysql
-mangum

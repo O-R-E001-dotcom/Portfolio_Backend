@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./portfolio.db")
+DATABASE_URL = os.getenv("JAWSDB_URL", "DATABASE_URL") #"sqlite:///./portfolio.db"
 
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
