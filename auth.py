@@ -1,4 +1,4 @@
-
+import hmac
 import os
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
@@ -11,11 +11,10 @@ SECRET_KEY = os.getenv("SECRET_KEY", "secret")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
 
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "password")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -26,8 +25,9 @@ def hash_password(password: str) -> str:
 
 
 def authenticate_admin(email: str, password: str) -> bool:
-    # Compare against env admin
-    return email == ADMIN_EMAIL and password == ADMIN_PASSWORD
+    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+        return False
+    return hmac.compare_digest(email, ADMIN_EMAIL) and hmac.compare_digest(password, ADMIN_PASSWORD)
 
 
 def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
