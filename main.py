@@ -1,16 +1,19 @@
 import os
-from typing import Optional
+import json
+from html import escape as html_escape
+from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from fastapi.responses import StreamingResponse
 import mimetypes
 import urllib.request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import uvicorn
 from database import engine, Base, get_db
-from models import Skill, Project, Profile
+from models import Skill, Project, Profile, ContactMessage
 from schemas import (
     SkillCreate,
     SkillUpdate,
@@ -20,6 +23,8 @@ from schemas import (
     PaginatedProjects,
     Token,
     Profile as ProfileOut,
+    ContactMessageCreate,
+    ContactMessageOut,
 )
 from auth import authenticate_admin, create_access_token
 from deps import get_current_admin
@@ -64,7 +69,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # CORS
-origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+origins_env = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "https://portfolio-eta-flax-91.vercel.app",
+)
 origins = [o.strip() for o in origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +121,21 @@ def get_or_create_profile(db: Session) -> Profile:
 @limiter.limit("60/minute")
 def root(request: Request):
     return {"message": "Portfolio backend is running"}
+
+
+@app.get("/health")
+@limiter.limit("120/minute")
+def health(request: Request, db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        database = "ok"
+    except Exception:
+        database = "error"
+
+    return {
+        "status": "ok" if database == "ok" else "degraded",
+        "database": database,
+    }
 
 
 @app.get("/profile", response_model=ProfileOut)
@@ -288,6 +312,19 @@ def list_projects(
     items = q.offset((page - 1) * page_size).limit(page_size).all()
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
+@app.get("/projects/{project_id}", response_model=ProjectOut)
+@limiter.limit("60/minute")
+def get_project(
+    request: Request,
+    project_id: int,
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @app.post("/projects", response_model=ProjectOut)
 @limiter.limit("20/minute")
 def create_project(
@@ -311,8 +348,8 @@ def create_project(
     project = Project(
         title=title,
         description=description,
-        repo_url=repo_url,
-        live_url=live_url,
+        repo_url=(repo_url or "").strip() or None,
+        live_url=(live_url or "").strip() or None,
         tech_stack=tech_stack,
         image_url=image_url,
         image_public_id=image_public_id,
@@ -345,9 +382,9 @@ def update_project(
     if description is not None:
         project.description = description
     if repo_url is not None:
-        project.repo_url = repo_url
+        project.repo_url = repo_url.strip() or None
     if live_url is not None:
-        project.live_url = live_url
+        project.live_url = live_url.strip() or None
     if tech_stack is not None:
         project.tech_stack = tech_stack
 
@@ -381,6 +418,121 @@ def delete_project(
     db.delete(project)
     db.commit()
     return {"ok": True}
+
+# ===== Contact =====
+def send_contact_email(payload: ContactMessageCreate) -> bool:
+    """Best-effort notification email via Brevo. Returns True if sent."""
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    sender_email = os.getenv("BREVO_SENDER_EMAIL", "aboloresanni001@gmail.com")
+    sender_name = os.getenv("BREVO_SENDER_NAME", "Portfolio")
+    admin_email = os.getenv("ADMIN_EMAIL", sender_email)
+
+    if not api_key or api_key.startswith("your_"):
+        return False
+
+    subject = payload.subject or "New portfolio message"
+    safe_name = html_escape(payload.name)
+    safe_email = html_escape(payload.email)
+    safe_subject = html_escape(subject)
+    safe_message = html_escape(payload.message)
+    html = (
+        f"<h2>New message from your portfolio</h2>"
+        f"<p><strong>Name:</strong> {safe_name}</p>"
+        f"<p><strong>Email:</strong> {safe_email}</p>"
+        f"<p><strong>Subject:</strong> {safe_subject}</p>"
+        f"<p><strong>Message:</strong></p>"
+        f"<p style='white-space:pre-wrap'>{safe_message}</p>"
+    )
+    body = json.dumps(
+        {
+            "sender": {"name": sender_name, "email": sender_email},
+            "to": [{"email": admin_email}],
+            "replyTo": {"email": payload.email, "name": payload.name},
+            "subject": f"Portfolio contact: {subject}",
+            "htmlContent": html,
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=body,
+        headers={
+            "api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return 200 <= resp.status < 300
+    except Exception:
+        return False
+
+
+@app.post("/contact", response_model=ContactMessageOut, status_code=201)
+@limiter.limit("5/minute")
+def create_contact_message(
+    request: Request,
+    payload: ContactMessageCreate,
+    db: Session = Depends(get_db),
+):
+    message = ContactMessage(
+        name=payload.name.strip(),
+        email=payload.email,
+        subject=(payload.subject or "").strip() or None,
+        message=payload.message.strip(),
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+
+    # Email delivery is best-effort; the message is always persisted.
+    send_contact_email(payload)
+    return message
+
+
+@app.get("/contact", response_model=List[ContactMessageOut])
+@limiter.limit("60/minute")
+def list_contact_messages(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    return db.query(ContactMessage).order_by(ContactMessage.created_at.desc()).all()
+
+
+@app.put("/contact/{message_id}/read", response_model=ContactMessageOut)
+@limiter.limit("60/minute")
+def mark_contact_message_read(
+    request: Request,
+    message_id: int,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    message = db.query(ContactMessage).filter(ContactMessage.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    message.is_read = True
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+@app.delete("/contact/{message_id}", status_code=204)
+@limiter.limit("30/minute")
+def delete_contact_message(
+    request: Request,
+    message_id: int,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(get_current_admin),
+):
+    message = db.query(ContactMessage).filter(ContactMessage.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    db.delete(message)
+    db.commit()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
