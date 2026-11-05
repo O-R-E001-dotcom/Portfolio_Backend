@@ -45,10 +45,17 @@ class ProjectBase(BaseModel):
 
     @field_validator("repo_url", "live_url", mode="before")
     @classmethod
-    def empty_url_to_none(cls, value):
+    def normalize_url(cls, value):
+        if value is None:
+            return None
         if isinstance(value, str):
             value = value.strip()
-            return value or None
+            if not value:
+                return None
+            # Accept bare domains from the admin form ("example.com") by
+            # defaulting to HTTPS instead of failing validation.
+            if "://" not in value and not value.startswith("mailto:"):
+                value = f"https://{value}"
         return value
 
 
@@ -65,10 +72,15 @@ class ProjectUpdate(BaseModel):
 
     @field_validator("repo_url", "live_url", mode="before")
     @classmethod
-    def empty_url_to_none(cls, value):
+    def normalize_url(cls, value):
+        if value is None:
+            return None
         if isinstance(value, str):
             value = value.strip()
-            return value or None
+            if not value:
+                return None
+            if "://" not in value and not value.startswith("mailto:"):
+                value = f"https://{value}"
         return value
 
 
@@ -78,6 +90,10 @@ class Project(ProjectBase):
     id: int
     image_url: Optional[str] = None
     created_at: datetime
+    # Response fields stay permissive so one malformed legacy URL cannot take
+    # down the whole list endpoint. Writes are still validated by ProjectBase.
+    repo_url: Optional[str] = None
+    live_url: Optional[str] = None
 
 
 class PaginatedSkills(BaseModel):
